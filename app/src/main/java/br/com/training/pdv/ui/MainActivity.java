@@ -1,15 +1,24 @@
-package br.com.training.pdv;
+package br.com.training.pdv.ui;
 
+import android.app.DownloadManager;
+import android.content.Intent;
 import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
+import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
 
-public class MainActivity extends AppCompatActivity {
+import java.util.List;
+
+import br.com.training.pdv.R;
+import br.com.training.pdv.domain.model.Produto;
+import se.emilsjolander.sprinkles.Query;
+
+public class MainActivity extends BaseActivity {
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -26,6 +35,24 @@ public class MainActivity extends AppCompatActivity {
                         .setAction("Action", null).show();
             }
         });
+
+    }
+
+    @Override
+    protected void onRestart() {
+        super.onRestart();
+        List<Produto> produtos = Query.all(Produto.class).get().asList();
+        if(produtos!=null){
+            for(Produto p:produtos){
+                Log.d("Produto","id-->"+p.getId());
+                Log.d("Produto","descricao-->"+p.getDescricao());
+                Log.d("Produto","unidade-->"+p.getUnidade());
+                Log.d("Produto","codigo barras-->"+p.getCodigoBarras());
+                Log.d("Produto","preco-->"+p.getPreco());
+                Log.d("Produto","foto-->"+p.getFoto());
+                Log.d("Produto","-------------------------");
+            }
+        }
     }
 
     @Override
@@ -43,8 +70,16 @@ public class MainActivity extends AppCompatActivity {
         int id = item.getItemId();
 
         //noinspection SimplifiableIfStatement
-        if (id == R.id.action_settings) {
-            return true;
+        if (id == R.id.action_novo) {
+
+            Intent intent= new Intent(MainActivity.this,CadastroNovoActivity.class);
+            startActivity(intent);
+
+        }else if(id == R.id.action_edit){
+
+            Intent telaEditarIntent= new Intent(MainActivity.this,EditarProdutoActivity.class);
+            startActivity(telaEditarIntent);
+
         }
 
         return super.onOptionsItemSelected(item);
