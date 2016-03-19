@@ -1,5 +1,6 @@
 package br.com.training.pdv.ui;
 
+import android.app.AlertDialog;
 import android.app.DownloadManager;
 import android.content.Intent;
 import android.graphics.Color;
@@ -8,29 +9,38 @@ import android.os.Bundle;
 import android.support.design.widget.FloatingActionButton;
 import android.support.design.widget.Snackbar;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.ButtonBarLayout;
 import android.support.v7.widget.Toolbar;
 import android.util.Log;
 import android.view.View;
 import android.view.Menu;
 import android.view.MenuItem;
+import android.widget.Button;
 import android.widget.Toast;
 
+import com.afollestad.materialdialogs.DialogAction;
+import com.afollestad.materialdialogs.MaterialDialog;
 import com.baoyz.swipemenulistview.SwipeMenu;
 import com.baoyz.swipemenulistview.SwipeMenuCreator;
 import com.baoyz.swipemenulistview.SwipeMenuItem;
 import com.baoyz.swipemenulistview.SwipeMenuListView;
+import com.github.javiersantos.materialstyleddialogs.MaterialStyledDialog;
+import com.michaldrabik.tapbarmenulib.TapBarMenu;
 
 import java.util.ArrayList;
 import java.util.List;
 
 import br.com.training.pdv.R;
 import br.com.training.pdv.domain.adapter.CustomArrayAdapter;
+import br.com.training.pdv.domain.model.Carrinho;
+import br.com.training.pdv.domain.model.Compra;
 import br.com.training.pdv.domain.model.Item;
 import br.com.training.pdv.domain.model.ItemProduto;
 import br.com.training.pdv.domain.model.Produto;
 import br.com.training.pdv.domain.network.APIClient;
 import br.com.training.pdv.domain.util.Util;
 import butterknife.Bind;
+import dmax.dialog.SpotsDialog;
 import jim.h.common.android.lib.zxing.config.ZXingLibConfig;
 import jim.h.common.android.lib.zxing.integrator.IntentIntegrator;
 import jim.h.common.android.lib.zxing.integrator.IntentResult;
@@ -43,17 +53,26 @@ import se.emilsjolander.sprinkles.Query;
 public class MainActivity extends BaseActivity {
 
     private ZXingLibConfig zxingLibConfig;
-
     private List<ItemProduto> list;
     private int quantidadeItens;
     private double valorTotal;
     private CustomArrayAdapter adapter;
+    private AlertDialog dialog;
 
+    //Cria chamada de resposta a requisicao do retrofit
     private Callback<List<Produto>> callbackProdutos;
+    private Callback<String> callbackCompra;
+
+    private String idCompra;
+    private Carrinho carrinho;
+    private Compra compra;
+
 
     @Bind(R.id.listView)
     SwipeMenuListView listView;
 
+    @Bind(R.id.tapBarMenu)
+    TapBarMenu tapBarMenu;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -62,16 +81,34 @@ public class MainActivity extends BaseActivity {
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
 
+        //Configura callback para o retrofit (REST)
         configureProdutoCallback();
+        configureCompraCallback();
 
+        //Mensagem a ser mostrada enquanto faz a leitura do servidor
+        dialog = new SpotsDialog(this,"Carregando...");
+
+        List<Item> itens = Query.all(Item.class).get().asList();
+        for(Item item:itens){
+            item.delete();
+        }
+        idCompra = Util.getUniquePsuedoID();
+        carrinho = new Carrinho();
+        carrinho.setIdCompra(idCompra);
+        carrinho.setEncerrada(0);
+        carrinho.setEnviada(0);
+
+
+        //Codigo de barras
         zxingLibConfig = new ZXingLibConfig();
-        zxingLibConfig.useFrontLight = true;
+        zxingLibConfig.useFrontLight = true; //Usar o flash automaticamente
+
 
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View view) {
-
+                //Inicia a leitura do codigo de barras
                 IntentIntegrator.initiateScan(MainActivity.this, zxingLibConfig);
 
             }
@@ -88,10 +125,8 @@ public class MainActivity extends BaseActivity {
                 openItem.setBackground(new ColorDrawable(Color.rgb(0xC9, 0xC9,
                         0xCE)));
                 // set item width
-                openItem.setWidth(Util.convertPixelsToDp(190,MainActivity.this));
-
+                openItem.setWidth(Util.convertPixelsToDp(590,MainActivity.this));
                 openItem.setIcon(R.drawable.ic_exposure_plus_1_black_36dp);
-
                 // add to menu
                 menu.addMenuItem(openItem);
 
@@ -102,13 +137,19 @@ public class MainActivity extends BaseActivity {
                 deleteItem.setBackground(new ColorDrawable(Color.rgb(0xF9,
                         0x3F, 0x25)));
                 // set item width
-                deleteItem.setWidth(Util.convertPixelsToDp(190,MainActivity.this));
+                deleteItem.setWidth(Util.convertPixelsToDp(590,MainActivity.this));
                 // set a icon
                 deleteItem.setIcon(R.drawable.ic_remove_shopping_cart_white_36dp);
                 // add to menu
                 menu.addMenuItem(deleteItem);
             }
         };
+
+        tapBarMenu.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                tapBarMenu.toggle();
+            }
+        });
 
 // set creator
         listView.setMenuCreator(creator);
@@ -132,30 +173,31 @@ public class MainActivity extends BaseActivity {
                         item.delete();
                         list.clear();
                         popularLista();
-
                         break;
                 }
                 return false;
             }
         });
 
-
         popularLista();
+
     }
 
     @Override
     protected void onRestart() {
         super.onRestart();
+        //Seleciona a lista completa da tabela produto e converte para lista
         List<Produto> produtos = Query.all(Produto.class).get().asList();
         if(produtos!=null){
-            for(Produto p:produtos){
-                Log.d("Produto","id-->"+p.getId());
-                Log.d("Produto","descricao-->"+p.getDescricao());
-                Log.d("Produto","unidade-->"+p.getUnidade());
-                Log.d("Produto","codigo barras-->"+p.getCodigoBarras());
-                Log.d("Produto","preco-->"+p.getPreco());
-                Log.d("Produto","foto-->"+p.getFoto());
-                Log.d("Produto","-------------------------");
+            //Equivale ao "for each"
+            for(Produto p: produtos){
+                Log.d("Produto:","id---------------->"+ p.getId());
+                Log.d("Produto:","descricao--------->"+ p.getDescricao());
+                Log.d("Produto:","unidade----------->"+ p.getUnidade());
+                Log.d("Produto:","codigo barras----->"+ p.getCodigoBarras());
+                Log.d("Produto:","preco------------->"+ p.getPreco());
+                Log.d("Produto:","foto-------------->"+ p.getFoto());
+                Log.d("Produto:","-----------------------------------------");
             }
         }
     }
@@ -176,24 +218,65 @@ public class MainActivity extends BaseActivity {
 
         //noinspection SimplifiableIfStatement
         if (id == R.id.action_novo) {
-
-            Intent intent= new Intent(MainActivity.this,CadastroNovoActivity.class);
-            startActivity(intent);
+            Intent telaCadastroNovoIntent = new Intent(MainActivity.this,CadastroNovoActivity.class);
+            startActivity(telaCadastroNovoIntent);
 
         }else if(id == R.id.action_edit){
-
-            Intent telaEditarIntent= new Intent(MainActivity.this,EditarProdutoActivity.class);
+            Intent telaEditarIntent = new Intent(MainActivity.this,EditarProdutoActivity.class);
             startActivity(telaEditarIntent);
 
         }else if(id == R.id.action_sincronia){
 
+            //Indicao de progresso
+            dialog.show();
+            //Chamada da classe REST para receber todos os produtos
             new APIClient().getRestService().getAllProdutos(callbackProdutos);
+        }else if (id == R.id.action_fecha_compra){
 
+            List<Item> itens = Query.all(Item.class).get().asList();
+            int quantidadeItens = 0;
+            double precoTotal = 0.0d;
+            Produto produto;
+            for(Item it:itens){
+                quantidadeItens +=it.getQuantidade();
+                produto = Query.one(Produto.class,"select * from produto where codigo_barra = ?",it.getIdProduto()).get();
+                precoTotal += it.getQuantidade()*produto.getPreco();
+
+            }
+
+            compra = new Compra();
+            compra.setCarrinho(carrinho);
+            compra.setItens(itens);
+
+            MaterialStyledDialog dialog = new MaterialStyledDialog(this)
+                    .setTitle("Fechar Compra?")
+                    .setDescription("Quantidade de volumes:"+quantidadeItens+"\nTotal R$"+precoTotal)
+                    .setPositive("Sim", new MaterialDialog.SingleButtonCallback() {
+                        @Override
+                        public void onClick(MaterialDialog dialog, DialogAction which) {
+
+                            dialog.dismiss();
+                            MainActivity.this.dialog.show();
+                            new APIClient().getRestService().enviarCompra(compra,callbackCompra);
+                            Log.d("MaterialStyledDialogs", "Do something!");
+                        }
+                    })
+                    .setNegative("Não", new MaterialDialog.SingleButtonCallback() {
+                        @Override
+                        public void onClick(MaterialDialog dialog, DialogAction which) {
+
+                            dialog.dismiss();
+                            Log.d("MaterialStyledDialogs", "Cancelado pelo usuário");
+                        }
+                    })
+                    .build();
+            dialog.show();
         }
 
         return super.onOptionsItemSelected(item);
     }
 
+    //Retorno da leitura do codigo de barras
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
@@ -208,21 +291,20 @@ public class MainActivity extends BaseActivity {
                 String result = scanResult.getContents();
                 if (result != null) {
 
-                    Log.d("SCANBARCODE","Barcode:"+result);
+                    Log.d("SCANBARCODE","BarCode: "+result);
 
-                    Produto produto = Query.one(Produto.class, "select * from produto where codigo_barra = ?", result).get();
+                    Produto produto = Query.one(Produto.class,"select * from produto where codigo_barra=?",result).get();
                     if(produto!=null){
-
                         Item item = new Item();
                         item.setId(0L);
-                        item.setIdCompra(1L);
+                        item.setIdCompra(idCompra);
                         item.setIdProduto(produto.getCodigoBarras());
                         item.setQuantidade(1);
                         item.save();
                         popularLista();
 
                     }else{
-                        Toast.makeText(MainActivity.this, "Produto não localizado!", Toast.LENGTH_SHORT).show();
+                        Toast.makeText(MainActivity.this, "Produto não localizado !", Toast.LENGTH_SHORT).show();
                     }
 
                 }
@@ -234,7 +316,7 @@ public class MainActivity extends BaseActivity {
     }
 
     public void popularLista(){
-        List<Item> listaItem = Query.many(Item.class, "select * from item where id_compra = ? order by id", 1).get().asList();
+        List<Item> listaItem = Query.many(Item.class, "select * from item where id_compra = ? order by id", idCompra).get().asList();
         Log.d("TAMANHOLISTA",""+ listaItem.size());
 
         ItemProduto itemProduto;
@@ -247,7 +329,7 @@ public class MainActivity extends BaseActivity {
 
             produto = Query.one(Produto.class,"select * from produto where codigo_barra = ?", item.getIdProduto()).get();
             itemProduto = new ItemProduto();
-            itemProduto.setIdCompra(1);
+            itemProduto.setIdCompra(idCompra);
             itemProduto.setIdItem(item.getId());
             itemProduto.setUnidade(produto.getUnidade());
             itemProduto.setFoto(produto.getFoto());
@@ -258,7 +340,7 @@ public class MainActivity extends BaseActivity {
             valorTotal+=item.getQuantidade()*produto.getPreco();
             quantidadeItens += item.getQuantidade();
         }
-        getSupportActionBar().setTitle("PDV"+ Util.getFormatedCurrency(String.valueOf(valorTotal)));
+        getSupportActionBar().setTitle("PDV "+ Util.getFormatedCurrency(String.valueOf(valorTotal)));
         adapter = new CustomArrayAdapter(this, R.layout.list_item, list);
         listView.setAdapter(adapter);
     }
@@ -271,23 +353,51 @@ public class MainActivity extends BaseActivity {
 
                 List<Produto> lp = Query.all(Produto.class).get().asList();
 
+                //Apaga produtos da lista local
                 for(Produto p:lp){
                     p.delete();
                 }
-
+                //Varre o resultado JSON recebido do servidor e cria banco local com os mesmos produtos do servidor
                 for(Produto produto:resultado){
                     produto.setId(0L);
                     produto.save();
                 }
+                dialog.dismiss();
 
             }
 
             @Override public void failure(RetrofitError error) {
-
+                dialog.dismiss();
                 Log.e("RETROFIT", "Error:"+error.getMessage());
             }
         };
     }
+    private void configureCompraCallback() {
 
+        callbackCompra = new Callback<String>() {
 
+            @Override public void success(String resultado, Response response) {
+
+                List<Item> itens = Query.all(Item.class).get().asList();
+                for (Item it:itens){
+                    it.delete();
+                }
+                carrinho = new Carrinho();
+                idCompra=Util.getUniquePsuedoID();
+                carrinho.setIdCompra(idCompra);
+                carrinho.setEnviada(0);
+                carrinho.setEncerrada(0);
+                popularLista();
+
+                dialog.dismiss();
+            }
+
+            @Override public void failure(RetrofitError error) {
+                dialog.dismiss();
+                Log.e("RETROFIT", "Error:"+error.getMessage());
+            }
+        };
+    }
 }
+
+

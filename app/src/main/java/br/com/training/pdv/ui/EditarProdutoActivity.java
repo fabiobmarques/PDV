@@ -1,5 +1,6 @@
 package br.com.training.pdv.ui;
 
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
@@ -34,6 +35,10 @@ import br.com.training.pdv.domain.util.Base64Util;
 import br.com.training.pdv.domain.util.ImageInputHelper;
 import butterknife.Bind;
 import butterknife.OnClick;
+import dmax.dialog.SpotsDialog;
+import retrofit.Callback;
+import retrofit.RetrofitError;
+import retrofit.client.Response;
 import se.emilsjolander.sprinkles.Query;
 
 public class EditarProdutoActivity extends BaseActivity implements ImageInputHelper.ImageActionListener{
@@ -60,6 +65,10 @@ public class EditarProdutoActivity extends BaseActivity implements ImageInputHel
 
     private Produto produto;
 
+    private Callback<String> callbackEditaProduto;
+
+    private AlertDialog dialog;
+
     private double latitude = 0.0d;
     private double longitude = 0.0d;
 
@@ -69,6 +78,9 @@ public class EditarProdutoActivity extends BaseActivity implements ImageInputHel
         setContentView(R.layout.activity_editar_produto);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+
+        configureEditaProdutoCallback();
+        dialog = new SpotsDialog(this,"Atualizando servidor");
 
         LostApiClient lostApiClient = new LostApiClient.Builder(this).build();
         lostApiClient.connect();
@@ -200,6 +212,28 @@ public class EditarProdutoActivity extends BaseActivity implements ImageInputHel
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+
+    //Método chamado para configurar o listen do retrofit
+    //Verifica o retorno da requisicao HTTP ao webservice
+    private void configureEditaProdutoCallback() {
+
+        callbackEditaProduto = new Callback<String>() {
+
+            @Override public void success(String resultado, Response response) {
+                dialog.dismiss();
+                //Finaliza a Activity
+                finish();
+
+            }
+
+            @Override public void failure(RetrofitError error) {
+                dialog.dismiss();
+
+                Snackbar.make(findViewById(android.R.id.content).getRootView(),"Houve um problema de conexão! Por favor verifique e tente novamente!", Snackbar.LENGTH_SHORT).show();
+                Log.e("RETROFIT", "Error:"+error.getMessage());
+            }
+        };
     }
 
 }

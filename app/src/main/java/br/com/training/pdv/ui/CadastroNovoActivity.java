@@ -1,5 +1,6 @@
 package br.com.training.pdv.ui;
 
+import android.app.AlertDialog;
 import android.content.Intent;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
@@ -22,16 +23,24 @@ import com.mapzen.android.lost.api.LostApiClient;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 
 import br.com.training.pdv.R;
 import br.com.training.pdv.domain.model.Produto;
+import br.com.training.pdv.domain.network.APIClient;
 import br.com.training.pdv.domain.util.Base64Util;
 import br.com.training.pdv.domain.util.ImageInputHelper;
 import butterknife.Bind;
 import butterknife.OnClick;
+import dmax.dialog.SpotsDialog;
+import retrofit.Callback;
+import retrofit.RetrofitError;
+import retrofit.client.Response;
+import se.emilsjolander.sprinkles.Query;
 
-public class CadastroNovoActivity extends BaseActivity implements ImageInputHelper.ImageActionListener {
+public class CadastroNovoActivity extends BaseActivity implements ImageInputHelper.ImageActionListener{
 
+    //Declaracao para usar ButterKnife. Faz a função do FindViewbyId. Fica só na declaração. Não precisa colocar o findViewById no OnCreate
     @Bind(R.id.editTextDescricao)
     EditText editTextDescricao;
     @Bind(R.id.editTextUnidade)
@@ -54,6 +63,11 @@ public class CadastroNovoActivity extends BaseActivity implements ImageInputHelp
     private double latitude = 0.0d;
     private double longitude = 0.0d;
 
+    private AlertDialog dialog;
+
+    //Callback para envio do produto ao servidor
+    Callback<String> callbackNovoProduto;
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -61,6 +75,11 @@ public class CadastroNovoActivity extends BaseActivity implements ImageInputHelp
         setContentView(R.layout.activity_cadastro_novo);
         Toolbar toolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(toolbar);
+
+        //Chamar metodo para escutar callback
+        configureNovoProdutoCallback();
+
+        dialog=new SpotsDialog(this,"Salvando no servidor...");
 
         LostApiClient lostApiClient = new LostApiClient.Builder(this).build();
         lostApiClient.connect();
@@ -74,10 +93,8 @@ public class CadastroNovoActivity extends BaseActivity implements ImageInputHelp
         Log.d("LOCATION","Latitude:"+latitude);
         Log.d("LOCATION","Longitude:"+longitude);
 
-
         imageInputHelper = new ImageInputHelper(this);
         imageInputHelper.setImageActionListener(this);
-
 
         FloatingActionButton fab = (FloatingActionButton) findViewById(R.id.fab);
         fab.setOnClickListener(new View.OnClickListener() {
@@ -87,30 +104,41 @@ public class CadastroNovoActivity extends BaseActivity implements ImageInputHelp
                 Log.d("Cadastro",editTextUnidade.getText().toString());
                 Log.d("Cadastro",editTextPreco.getText().toString());
                 Log.d("Cadastro",editTextCodigo.getText().toString());
+                //Cria classe produto para inserir dados no banco usando Sprinkles
                 produto = new Produto();
-                produto.setId(0L);
+                produto.setId(0L); //Especifica que é um 0 tipo long para criar um novo. Se for diferente de 0 e existir na tabela, ele atualiza o existente
                 produto.setDescricao(editTextDescricao.getText().toString());
                 produto.setUnidade(editTextUnidade.getText().toString());
                 produto.setCodigoBarras(editTextCodigo.getText().toString());
-                if(!editTextPreco.getText().toString().equals("")) {
+                //Checa se existe preço para converter de String para Double
+                if(!editTextPreco.getText().toString().equals("")){
                     produto.setPreco(Double.parseDouble(editTextPreco.getText().toString()));
                 }else{
                     produto.setPreco(0.0);
                 }
+
+                //Pega a foto do imageview e converte em Bitmap
                 Bitmap imagem = ((BitmapDrawable)imageViewFoto.getDrawable()).getBitmap();
+                //Converte de Bitmap para String base 64 e armazena no campo foto do BD
                 produto.setFoto(Base64Util.encodeTobase64(imagem));
 
                 produto.setLatitude(latitude);
                 produto.setLongitude(longitude);
+                produto.setStatus(0);
 
+                //Salva na tabela do banco de dados local
                 produto.save();
-                finish();
 
+                //Mensagem para mostrar salvando no servidor
+                dialog.show();
+                //Gravar o produto também no servidor
+                new APIClient().getRestService().createProduto(produto.getCodigoBarras(),produto.getDescricao(),produto.getUnidade(),produto.getPreco(),produto.getFoto(),produto.getLatitude(),produto.getLongitude(),produto.getStatus(),callbackNovoProduto);
 
             }
         });
     }
 
+    //Método Click do botao galeria. Implmentação usando Butter Knife
     @OnClick(R.id.imageButtonGaleria)
     public void onClickGaleria(){
         imageInputHelper.selectImageFromGallery();
@@ -120,7 +148,6 @@ public class CadastroNovoActivity extends BaseActivity implements ImageInputHelp
     public void onClickCamera(){
         imageInputHelper.takePhotoWithCamera();
     }
-
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
@@ -153,5 +180,26 @@ public class CadastroNovoActivity extends BaseActivity implements ImageInputHelp
         } catch (IOException e) {
             e.printStackTrace();
         }
+    }
+    //Método chamado para configurar o listen do retrofit
+    //Verifica o retorno da requisicao HTTP ao webservice
+    private void configureNovoProdutoCallback() {
+
+        callbackNovoProduto = new Callback<String>() {
+
+            @Override public void success(String resultado, Response response) {
+                dialog.dismiss();
+                //Finaliza a Activity
+                finish();
+
+            }
+
+            @Override public void failure(RetrofitError error) {
+                dialog.dismiss();
+
+                Snackbar.make(findViewById(android.R.id.content).getRootView(),"Houve um problema de conexão! Por favor verifique e tente novamente!", Snackbar.LENGTH_SHORT).show();
+                Log.e("RETROFIT", "Error:"+error.getMessage());
+            }
+        };
     }
 }

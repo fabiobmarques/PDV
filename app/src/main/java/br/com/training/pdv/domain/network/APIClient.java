@@ -2,13 +2,16 @@ package br.com.training.pdv.domain.network;
 
 import java.util.List;
 
+import br.com.training.pdv.domain.model.Compra;
 import br.com.training.pdv.domain.model.Produto;
 import retrofit.Callback;
 import retrofit.RestAdapter;
 import retrofit.client.OkClient;
+import retrofit.http.Body;
 import retrofit.http.Field;
 import retrofit.http.FormUrlEncoded;
 import retrofit.http.GET;
+import retrofit.http.Headers;
 import retrofit.http.POST;
 import retrofit.http.PUT;
 import retrofit.http.Path;
@@ -44,6 +47,13 @@ public class APIClient {
         @GET("/produto/todos")
         void getAllProdutos(
                 Callback<List<Produto>> callbackProdutos
+        );
+
+        @Headers( "Content-Type: application/json" )
+        @POST("/compra/cadastro")
+        void enviarCompra(
+                @Body Compra compra,
+                Callback<String> callbackCompra
         );
 
         @FormUrlEncoded()
