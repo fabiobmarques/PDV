@@ -1,5 +1,7 @@
 package br.com.training.pdv.domain.model;
 
+import com.google.gson.annotations.SerializedName;
+
 import se.emilsjolander.sprinkles.Model;
 import se.emilsjolander.sprinkles.annotations.AutoIncrement;
 import se.emilsjolander.sprinkles.annotations.Column;
@@ -29,6 +31,19 @@ public class Produto extends Model {
     private String foto;
     @Column("latitude")
     private double latitude;
+    @Column("longitude")
+    private double longitude;
+    @Column("status")
+    @SerializedName("ativo")
+    private int status;
+
+    public int getStatus() {
+        return status;
+    }
+
+    public void setStatus(int status) {
+        this.status = status;
+    }
 
     public double getLongitude() {
         return longitude;
@@ -38,8 +53,6 @@ public class Produto extends Model {
         this.longitude = longitude;
     }
 
-    @Column("longitude")
-    private double longitude;
 
     public double getLatitude() {
         return latitude;
